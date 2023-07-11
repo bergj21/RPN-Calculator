@@ -1,0 +1,59 @@
+# printd.ums
+# Authors: Jack Berg (jberg02) and Liam Drew (wdrew02)
+# Purpose: Contains the implementation of the printd function, which prints
+#          32 bit signed integers.
+
+# Calling Conventions: 
+# r0 is zero
+# return address in r1, which gets result
+# stack pointer in r2
+# r3, r4 are non-volatile
+# r5 is volatile
+# r6, r7 are temps
+
+.section init 
+        .zero r0
+        .temps r6,r7
+
+.section text
+
+        # printd
+        # Purpose: Prints a signed 32 bit integer
+        # Arguments: 
+        #          Digit to print: Must be on the top of the call stack before
+        #                the printd function is called.
+        # Return Address stored in r1
+        printd:
+                push r1 on stack r2     # pushing return address onto stack
+                push r3 on stack r2     # saving value of non volatile register
+                push r4 on stack r2
+                r3 := m[r0][r2 + 3] 
+
+                if (r3 <s 0) goto handle_negative using r4  # check if negative
+
+                goto print_digit     # skip handle_negative if positive number
+
+        handle_negative: # print the sign at the beginning if negative number
+                output '-'
+                r3 := ~r3   #flip the bits and add one to change value sign
+                r3 := r3 + 1
+
+        print_digit:
+                r5 := r3 / 10
+                if (r5 == 0) goto base_case    # if the value is a single digit
+                # If not a single digit, recurse again
+                r4 := r3 mod 10         # get the current lowest digit 
+                push r5 on stack r2
+                goto printd linking r1  # call printd on the high order digits
+                pop stack r2 
+                output r4 + '0'         # print that current lowest digit5
+                goto finish_print
+
+        base_case: 
+                output r3 + '0'         # print single digit
+        
+        finish_print:
+                pop r4 off stack r2
+                pop r3 off stack r2      
+                pop r5 off stack r2    
+                goto r5

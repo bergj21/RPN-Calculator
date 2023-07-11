@@ -1,0 +1,371 @@
+# calc40.ums
+# Authors: Jack Berg (jberg02) and Liam Drew (wdrew02)
+# Purpose: The implementation for an RPN Calculator.
+
+# Calling Conventions: 
+# r0 is zero
+# return address in r1, which gets result
+# stack pointer in r2
+# r3, r4 are non-volatile
+# r5 is volatile
+# r6, r7 are temps
+  
+.section init 
+        .zero r0
+        .temps r6,r7
+
+.section text   # The label that is utilized when there is unknown input
+        input_error:
+                output "Unknown character '"
+                output r1
+                output "'\n"  
+                goto waiting
+
+.section init   # The initializion of the jump table (256 possible jumps)
+        jumptable_ini:
+                r3 := 255
+                goto jumptable_test 
+
+        jumptable_ini_loop:     # 1st initialize the table with all input_error
+                r4 := jumptable + r3
+                m[r0][r4] := input_error
+                r3 := r3 - 1
+
+        jumptable_test: 
+                # Perform loop until all 256 cases are initialized
+                if (r3 != r0) goto jumptable_ini_loop using r5
+
+                # Update labels with known jumps 
+                m[r0][jumptable + '0'] := digit
+                m[r0][jumptable + '1'] := digit
+                m[r0][jumptable + '2'] := digit
+                m[r0][jumptable + '3'] := digit
+                m[r0][jumptable + '4'] := digit
+                m[r0][jumptable + '5'] := digit
+                m[r0][jumptable + '6'] := digit
+                m[r0][jumptable + '7'] := digit
+                m[r0][jumptable + '8'] := digit
+                m[r0][jumptable + '9'] := digit
+                m[r0][jumptable + ' '] := waiting
+
+# Push the input integer r1 onto the value stack, then return
+.section text 
+        digit:
+                # Subtract ASCII value 0 to retrieve actual integer value
+                r1 := r1 - '0'
+                push r1 on stack r3
+                goto entering
+        
+.section init 
+        m[r0][jumptable + '\n'] := print_value_stk
+.section text
+        print_value_stk:
+                # initializing r4 to store the top of the value stack
+                # r4 will iterate through the value stack
+                r4 := r3
+                goto print_stack_loop_test
+
+        print_stack_loop:
+                # getting the value stored at the stack address r4
+                r5 := m[r0][r4]
+                # storing r5 on the stack for use in the printd function
+                push r5 on stack r2
+                output ">>> "
+                # Call the prind function to print the current integer on stack
+                goto printd linking r1
+                output "\n"
+                # restoring stack
+                pop r5 off stack r2
+                # Updating the stack iterator
+                r4 := r4 + 1
+
+        print_stack_loop_test:
+                # Check if the iterator has made it to the bottom of the stack
+                if (r4 != valstk) goto print_stack_loop using r5
+                # If the whole stack has been printed, return to waiting
+                goto waiting
+
+.section text
+        # For Unary operators, ensures that there is at least 1 parameter on 
+        # the stack
+        check1:
+                if (r3 == valstk) goto lacking_one_param using r5
+                goto r1
+
+        lacking_one_param:
+                output "Stack underflow---expected at least 1 element\n"
+                goto waiting
+
+        # For Binary operators, ensures that there are at least 2 parameters on
+        # the stack
+        check2:
+                if (r3 == valstk) goto lacking_two_params using r5
+                r4 := r3 + 1
+                if (r4 == valstk) goto lacking_two_params using r5
+                goto r1
+
+        lacking_two_params:
+                output "Stack underflow---expected at least 2 elements\n"
+                goto waiting
+
+# Pop two values off the stack and push their sum onto val stack by
+# adding r4 to r5, then return (must be two values on the stack)
+# Arguments: The register containing the top of the value stack (r3)
+# Effects: Pushes the sum of the top two elements on the value stack back onto
+#       the value stack. No return value.
+.section init 
+        m[r0][jumptable + '+'] := add
+.section text
+        add:
+                goto check2 linking r1
+                pop r4 off stack r3
+                pop r5 off stack r3
+                r5 := r5 + r4
+                push r5 on stack r3
+                goto waiting
+
+# Pop two values off the stack and push their difference onto val stack by
+# subtracting r4 from r5, then return (must be two values on the stack)
+# Arguments: The register containing the top of the value stack (r3)
+# Effects: Pushes the difference of the top two elements on the value stack
+#       back onto the value stack. No return value.
+.section init
+        m[r0][jumptable + '-'] := sub
+.section text
+        sub:
+                goto check2 linking r1
+                pop r4 off stack r3
+                pop r5 off stack r3
+                r5 := r5 - r4
+                push r5 on stack r3
+                goto waiting
+
+# Pop two values off the stack and push their product onto val stack by
+# multiplying r4 and r5, then return (must be two values on the stack)
+# Arguments: The register containing the top of the stack (r3)
+# Effects: Pushes the product of the top two elements on the value stack back
+#       onto the value stack.
+.section init
+        m[r0][jumptable + '*'] := mul
+.section text
+        mul:
+                goto check2 linking r1
+                pop r4 off stack r3
+                pop r5 off stack r3
+                r5 := r5 * r4
+                push r5 on stack r3
+                goto waiting
+
+# Pop two values off the stack and push their bitwise AND onto val stack by
+# taking the & of r4 and r5, then return (must be two values on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, pushes the AND of top two values on stack
+.section init
+        m[r0][jumptable + '&'] := and
+.section text
+        and:
+                goto check2 linking r1
+                pop r4 off stack r3
+                pop r5 off stack r3
+                r5 := r5 & r4
+                push r5 on stack r3
+                goto waiting
+
+# Pop two values off the stack and push their bitwise OR onto val stack by 
+# taking the | of r4 and r5, then return (must be two values on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, pushes the OR of top two values on stack
+.section init
+        m[r0][jumptable + '|'] := or
+.section text
+        or:
+                goto check2 linking r1
+                pop r4 off stack r3
+                pop r5 off stack r3
+                r5 := r5 | r4
+                push r5 on stack r3
+                goto waiting
+
+# Pop one value off the stack into r5, and push it's bitwise NOT val onto stack
+# by flipping all the bits, then return (must be one value on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, NOTs the value on top of the val stack
+.section init
+        m[r0][jumptable + '~'] := not
+.section text
+        not:
+                goto check1 linking r1
+                pop r5 off stack r3
+                r5 := ~r5
+                push r5 on stack r3
+                goto waiting
+
+# Pop one value off the stack into register r5, flip the sign of r5 and push 
+# it onto the val stack, then return (must be one value on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, swaps the sign of the value on top of stack
+.section init
+        m[r0][jumptable + 'c'] := change
+.section text
+        change:
+                goto check1 linking r1
+                pop r5 off stack r3
+                r5 := -r5
+                push r5 on stack r3
+                goto waiting
+
+# Pop two values off the stack and push their signed division onto val stack. 
+# Check to see whether r4 and/or r5 are negative to determine the division
+# calculations, then return (must be two values on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, pushes the signed division result on stack 
+.section init
+        m[r0][jumptable + '/'] := divide
+.section text
+        divide:
+                goto check2 linking r1
+                pop r4 off stack r3     # y value
+                pop r5 off stack r3     # x value
+                if (r4 == r0) goto div_zero using r1
+                if (r5 <s r0) goto x_negative using r1
+                if (r4 <s r0) goto y_negative using r1
+                goto both_positive using r1
+        
+        div_zero: # Leave the value stack unchanged if division by zero
+                output "Division by zero\n"
+                push r5 on stack r3
+                push r4 on stack r3
+                goto waiting
+
+        x_negative: # x is the only negative value
+                if (r4 <s r0) goto both_negative using r1
+                r5 := -r5
+                r5 := r5 / r4
+                r5 := -r5
+                push r5 on stack r3
+                goto waiting
+
+        y_negative: # y is the only negative value
+                r4 := -r4
+                r5 := r5 / r4
+                r5 := -r5
+                push r5 on stack r3
+                goto waiting
+
+        both_negative: # Both x and y are negative values
+                r5 := -r5
+                r4 := -r4
+                r5 := r5 / r4
+                push r5 on stack r3
+                goto waiting
+
+        both_positive: # Both x and y are positive values
+                r5 := r5 / r4
+                push r5 on stack r3
+                goto waiting
+
+# Pop two values off the stack and push them back onto the stack s.t. they are 
+# swapped, then return (must be two values on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, swaps the top two values off the stack
+.section init
+        m[r0][jumptable + 's'] := swap
+.section text
+        swap:
+                goto check2 linking r1
+                pop r4 off stack r3
+                pop r5 off stack r3
+                push r4 on stack r3
+                push r5 on stack r3
+                goto waiting
+
+# Pop one value off the stack into register r4, and push r4 back onto the val 
+# stack twice, then return (must be one value on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, duplicates values on top of the stack
+.section init
+        m[r0][jumptable + 'd'] := dup
+.section text
+        dup:
+                goto check1 linking r1
+                pop r4 off stack r3
+                push r4 on stack r3
+                push r4 on stack r3
+                goto waiting
+
+# Pop one value off the stack, then return (must be one value on the stack)
+# Arguments: The register containing the top of the value stack
+# Effects: No return value, simply pops value off top of the stack
+.section init
+        m[r0][jumptable + 'p'] := pop_off
+.section text
+        pop_off:
+                goto check1 linking r1
+                pop stack r3
+                goto waiting
+
+# Pop off all values on the stack via looping through the val stack, 
+# then return (must be one value on the stack)
+# Arguments: The register containing the top of the value stack
+.section init
+        m[r0][jumptable + 'z'] := zero_stack
+.section text
+        zero_stack:
+                goto zero_stack_test
+        zero_stack_loop:
+                pop stack r3
+        zero_stack_test:
+                if (r3 == valstk) goto waiting using r5
+                goto zero_stack_loop
+
+# The allocation of space for the jumptable
+.section rodata
+        jumptable:
+                .space 256
+
+# The allocation of space for the value stack
+.section data
+        .space 100000
+        valstk:
+
+.section text
+
+        # main
+        # Purpose: Commands the RPN Calculator loop and the handling of the 
+        #       switch table
+        # Arguments: None
+        # Return Address stored in r1
+        main:
+                push r1 on stack r2
+                r3 := valstk       # store the value stack in register r3
+                waiting:
+                        # Take input from the waiting phase
+                        r1 := input()
+
+                waiting_with_character:
+                        # Checking for EOF
+                        r4 := r0 nand r0
+                        if (r1 == r4) goto finish using r4
+                        # Jump in table according to the input value
+                        r5 := jumptable + r1
+                        r5 := m[r0][r5]
+                        goto r5
+
+                entering:
+                        # Take input from the entering phase
+                        r1 := input()
+                        # If the input is a digit then concatenate
+                        if (r1 <s '0') goto waiting_with_character using r5
+                        if (r1 >s '9') goto waiting_with_character using r5
+                        r1 := r1 - '0'
+                        pop r4 off stack r3
+                        r4 := r4 * 10
+                        r4 := r4 + r1
+                        push r4 on stack r3
+                        # Go back to entering phase to allow for more digits 
+                        goto entering
+                
+                finish:
+                        pop r5 off stack r2                          
+                        r1 := 0         # Return exit success
+                        goto r5 

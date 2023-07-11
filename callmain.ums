@@ -1,0 +1,19 @@
+# callmain.ums
+# Authors: Jack Berg (jberg02) and Liam Drew (wdrew02)
+# Purpose: Calls main and halts.
+
+# Calling Conventions: 
+# r0 is zero
+# return address in r1, which gets result
+# stack pointer in r2
+# r3, r4 are non-volatile
+# r5 is volatile
+# r6, r7 are temps
+
+.section init 
+        .zero r0
+        .temps r6, r7
+
+        goto main linking r1
+
+        halt
